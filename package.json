@@ -1,0 +1,20 @@
+{
+  "name": "school-attendance-system",
+  "version": "1.0.0",
+  "description": "Comprehensive School Attendance System with React, Node.js, and SQLite",
+  "scripts": {
+    "start": "node backend/server.js",
+    "backend": "node backend/server.js",
+    "frontend": "cd frontend && npm run dev",
+    "build": "cd frontend && npm run build"
+  },
+  "keywords": [
+    "attendance",
+    "school-management",
+    "react",
+    "express",
+    "sqlite"
+  ],
+  "author": "",
+  "license": "ISC"
+}

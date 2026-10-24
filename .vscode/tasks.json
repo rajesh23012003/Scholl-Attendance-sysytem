@@ -1,0 +1,29 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "▶️ Start Full Project (npm start)",
+      "type": "npm",
+      "script": "start",
+      "problemMatcher": [],
+      "isBackground": true,
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    },
+    {
+      "label": "⚡ Start Frontend Dev Server (npm run frontend)",
+      "type": "npm",
+      "script": "frontend",
+      "problemMatcher": [],
+      "isBackground": true
+    },
+    {
+      "label": "🔨 Rebuild Frontend (npm run build)",
+      "type": "npm",
+      "script": "build",
+      "problemMatcher": []
+    }
+  ]
+}
