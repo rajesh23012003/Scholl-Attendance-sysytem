@@ -64,6 +64,49 @@ function initDb() {
       FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
       FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT UNIQUE NOT NULL,
+      password TEXT NOT NULL,
+      name TEXT NOT NULL,
+      role TEXT NOT NULL CHECK(role IN ('admin', 'teacher', 'parent')),
+      email TEXT,
+      phone TEXT,
+      class_id INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS timetable (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      class_id INTEGER NOT NULL,
+      day_of_week TEXT NOT NULL CHECK(day_of_week IN ('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday')),
+      period_number INTEGER NOT NULL,
+      start_time TEXT NOT NULL,
+      end_time TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      teacher_name TEXT NOT NULL,
+      room_number TEXT,
+      FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE,
+      UNIQUE(class_id, day_of_week, period_number)
+    );
+
+    CREATE TABLE IF NOT EXISTS fees (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      student_id INTEGER NOT NULL,
+      class_id INTEGER NOT NULL,
+      fee_type TEXT NOT NULL,
+      amount REAL NOT NULL,
+      due_date TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'Pending' CHECK(status IN ('Paid', 'Pending', 'Overdue')),
+      paid_date TEXT,
+      payment_mode TEXT,
+      receipt_number TEXT UNIQUE,
+      remarks TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
+      FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE
+    );
   `);
 
   // Check if we already have classes seeded
@@ -76,6 +119,24 @@ function initDb() {
   const checkLeaves = db.prepare('SELECT COUNT(*) as count FROM leave_applications').get();
   if (checkLeaves.count === 0) {
     seedInitialLeaves();
+  }
+
+  // Check if we have users seeded
+  const checkUsers = db.prepare('SELECT COUNT(*) as count FROM users').get();
+  if (checkUsers.count === 0) {
+    seedInitialUsers();
+  }
+
+  // Check if we have timetable seeded
+  const checkTimetable = db.prepare('SELECT COUNT(*) as count FROM timetable').get();
+  if (checkTimetable.count === 0) {
+    seedInitialTimetable();
+  }
+
+  // Check if we have fees seeded
+  const checkFees = db.prepare('SELECT COUNT(*) as count FROM fees').get();
+  if (checkFees.count === 0) {
+    seedInitialFees();
   }
 }
 
@@ -132,6 +193,147 @@ function seedInitialLeaves() {
     );
   }
   console.log('Sample leave applications seeded!');
+}
+
+function seedInitialUsers() {
+  const insertUser = db.prepare(`
+    INSERT INTO users (username, password, name, role, email, phone, class_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const usersData = [
+    ['admin', 'admin123', 'Dr. Alok Verma (Principal)', 'admin', 'principal@vidyamandir.edu', '+91 9811122233', null],
+    ['teacher', 'teacher123', 'Mrs. Sunita Sharma', 'teacher', 'sunita.sharma@vidyamandir.edu', '+91 9822233344', 1],
+    ['teacher2', 'teacher123', 'Mr. Amit Verma', 'teacher', 'amit.verma@vidyamandir.edu', '+91 9833344455', 2],
+    ['parent', 'parent123', 'Ramesh Sharma (Parent)', 'parent', 'ramesh.sharma@gmail.com', '+91 9876543210', 1]
+  ];
+
+  for (const u of usersData) {
+    insertUser.run(...u);
+  }
+  console.log('Sample users seeded!');
+}
+
+function seedInitialTimetable() {
+  const classes = db.prepare('SELECT id, name, section, room_number, class_teacher FROM classes').all();
+  if (classes.length === 0) return;
+
+  const insertSlot = db.prepare(`
+    INSERT OR REPLACE INTO timetable (class_id, day_of_week, period_number, start_time, end_time, subject, teacher_name, room_number)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const timeSlots = [
+    { period: 1, start: '08:30 AM', end: '09:15 AM' },
+    { period: 2, start: '09:15 AM', end: '10:00 AM' },
+    { period: 3, start: '10:00 AM', end: '10:45 AM' },
+    { period: 4, start: '11:15 AM', end: '12:00 PM' },
+    { period: 5, start: '12:00 PM', end: '12:45 PM' },
+    { period: 6, start: '12:45 PM', end: '01:30 PM' }
+  ];
+
+  const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+
+  const subjectPool = [
+    { subject: 'Mathematics', teacher: 'Mrs. Sunita Sharma' },
+    { subject: 'Science', teacher: 'Mr. Rajesh Kumar' },
+    { subject: 'English', teacher: 'Mrs. Neha Gupta' },
+    { subject: 'Social Science', teacher: 'Mr. Amit Verma' },
+    { subject: 'Computer Science', teacher: 'Ms. Priya Sen' },
+    { subject: 'Hindi', teacher: 'Mr. Vinod Joshi' },
+    { subject: 'Physical Ed / Sports', teacher: 'Coach Dahiya' },
+    { subject: 'Art & Craft', teacher: 'Mrs. Shalini Roy' }
+  ];
+
+  for (const c of classes) {
+    days.forEach((day, dayIdx) => {
+      timeSlots.forEach((slot, slotIdx) => {
+        // cycle through subjects deterministically
+        const subIdx = (c.id * 3 + dayIdx * 2 + slotIdx) % subjectPool.length;
+        const sub = subjectPool[subIdx];
+        insertSlot.run(
+          c.id,
+          day,
+          slot.period,
+          slot.start,
+          slot.end,
+          sub.subject,
+          sub.teacher,
+          c.room_number || 'Room 101'
+        );
+      });
+    });
+  }
+  console.log('Sample timetable schedule seeded!');
+}
+
+function seedInitialFees() {
+  const students = db.prepare('SELECT id, class_id, first_name, last_name, roll_number FROM students').all();
+  if (students.length === 0) return;
+
+  const insertFee = db.prepare(`
+    INSERT INTO fees (student_id, class_id, fee_type, amount, due_date, status, paid_date, payment_mode, receipt_number, remarks)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  let receiptCounter = 1001;
+
+  students.forEach((st, idx) => {
+    // 1. Tuition Fee (Quarter 3)
+    const isPaid = idx % 3 !== 0;
+    const isOverdue = idx % 3 === 0 && idx % 2 === 0;
+    const tStatus = isPaid ? 'Paid' : (isOverdue ? 'Overdue' : 'Pending');
+    const tReceipt = isPaid ? `VM-REC-${receiptCounter++}` : null;
+    const tPaidDate = isPaid ? '2026-10-10' : null;
+    const tMode = isPaid ? (idx % 2 === 0 ? 'UPI / QR' : 'Net Banking') : null;
+
+    insertFee.run(
+      st.id,
+      st.class_id,
+      'Tuition Fee (Quarter 3)',
+      12500,
+      '2026-10-15',
+      tStatus,
+      tPaidDate,
+      tMode,
+      tReceipt,
+      isPaid ? 'Quarterly tuition fees cleared' : 'Term 3 due'
+    );
+
+    // 2. Transport Fee
+    if (idx % 2 === 0) {
+      const transPaid = idx % 4 !== 0;
+      insertFee.run(
+        st.id,
+        st.class_id,
+        'Transport Fee',
+        2400,
+        '2026-10-20',
+        transPaid ? 'Paid' : 'Pending',
+        transPaid ? '2026-10-12' : null,
+        transPaid ? 'Cash' : null,
+        transPaid ? `VM-REC-${receiptCounter++}` : null,
+        'Bus Route #4 Gurugram'
+      );
+    }
+
+    // 3. Computer & Lab Fee
+    const labPaid = idx % 5 !== 0;
+    insertFee.run(
+      st.id,
+      st.class_id,
+      'Computer & Science Lab Fee',
+      3200,
+      '2026-11-05',
+      labPaid ? 'Paid' : 'Pending',
+      labPaid ? '2026-10-18' : null,
+      labPaid ? 'UPI / QR' : null,
+      labPaid ? `VM-REC-${receiptCounter++}` : null,
+      'Annual Science Lab & IT subscription'
+    );
+  });
+
+  console.log('Sample fees records seeded!');
 }
 
 function seedInitialData() {

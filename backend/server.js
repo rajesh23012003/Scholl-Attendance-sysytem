@@ -680,6 +680,236 @@ app.delete('/api/leaves/:id', (req, res) => {
   }
 });
 
+// -------------------------------------------------------------
+// 7. AUTHENTICATION API
+// -------------------------------------------------------------
+app.post('/api/auth/login', (req, res) => {
+  try {
+    const { username, password } = req.body;
+    if (!username || !password) {
+      return res.status(400).json({ success: false, message: 'Username and password required.' });
+    }
+
+    const user = db.prepare('SELECT id, username, name, role, email, phone, class_id, password FROM users WHERE username = ?').get(username.trim());
+    if (!user || user.password !== password) {
+      return res.status(401).json({ success: false, message: 'Invalid credentials. Please check your username or password.' });
+    }
+
+    const { password: _, ...safeUser } = user;
+    res.json({ success: true, user: safeUser, token: `simulated-token-${user.id}` });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.get('/api/auth/users', (req, res) => {
+  try {
+    const users = db.prepare('SELECT id, username, name, role, email, phone, class_id, created_at FROM users').all();
+    res.json({ success: true, data: users });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// -------------------------------------------------------------
+// 8. TIMETABLE API
+// -------------------------------------------------------------
+app.get('/api/timetable', (req, res) => {
+  try {
+    const { class_id } = req.query;
+    let query = `
+      SELECT t.*, c.name || ' - ' || c.section AS class_label
+      FROM timetable t
+      JOIN classes c ON t.class_id = c.id
+    `;
+    const params = [];
+
+    if (class_id) {
+      query += ` WHERE t.class_id = ?`;
+      params.push(class_id);
+    }
+
+    query += ` ORDER BY 
+      CASE t.day_of_week
+        WHEN 'Monday' THEN 1
+        WHEN 'Tuesday' THEN 2
+        WHEN 'Wednesday' THEN 3
+        WHEN 'Thursday' THEN 4
+        WHEN 'Friday' THEN 5
+        WHEN 'Saturday' THEN 6
+      END,
+      t.period_number ASC`;
+
+    const timetable = db.prepare(query).all(...params);
+    res.json({ success: true, data: timetable });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.post('/api/timetable', (req, res) => {
+  try {
+    const { class_id, day_of_week, period_number, start_time, end_time, subject, teacher_name, room_number } = req.body;
+    if (!class_id || !day_of_week || !period_number || !subject) {
+      return res.status(400).json({ success: false, message: 'Missing required timetable slot fields.' });
+    }
+
+    const stmt = db.prepare(`
+      INSERT OR REPLACE INTO timetable (class_id, day_of_week, period_number, start_time, end_time, subject, teacher_name, room_number)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    stmt.run(class_id, day_of_week, period_number, start_time, end_time, subject, teacher_name || '', room_number || '');
+    res.json({ success: true, message: 'Timetable slot saved successfully.' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.delete('/api/timetable/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    db.prepare('DELETE FROM timetable WHERE id = ?').run(id);
+    res.json({ success: true, message: 'Slot deleted.' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// -------------------------------------------------------------
+// 9. FEES & RECEIPTS API
+// -------------------------------------------------------------
+app.get('/api/fees', (req, res) => {
+  try {
+    const { class_id, status, search } = req.query;
+    let query = `
+      SELECT 
+        f.*,
+        s.first_name || ' ' || s.last_name AS student_name,
+        s.roll_number,
+        s.parent_name,
+        s.parent_phone,
+        c.name || ' - ' || c.section AS class_label
+      FROM fees f
+      JOIN students s ON f.student_id = s.id
+      JOIN classes c ON f.class_id = c.id
+      WHERE 1=1
+    `;
+    const params = [];
+
+    if (class_id) {
+      query += ` AND f.class_id = ?`;
+      params.push(class_id);
+    }
+
+    if (status) {
+      query += ` AND f.status = ?`;
+      params.push(status);
+    }
+
+    if (search) {
+      query += ` AND (s.first_name LIKE ? OR s.last_name LIKE ? OR s.roll_number LIKE ? OR f.fee_type LIKE ? OR f.receipt_number LIKE ?)`;
+      const term = `%${search}%`;
+      params.push(term, term, term, term, term);
+    }
+
+    query += ` ORDER BY f.due_date DESC, f.id DESC`;
+
+    const fees = db.prepare(query).all(...params);
+    res.json({ success: true, data: fees });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.get('/api/fees/stats', (req, res) => {
+  try {
+    const totalCollected = db.prepare(`SELECT SUM(amount) as total FROM fees WHERE status = 'Paid'`).get().total || 0;
+    const totalPending = db.prepare(`SELECT SUM(amount) as total FROM fees WHERE status = 'Pending'`).get().total || 0;
+    const totalOverdue = db.prepare(`SELECT SUM(amount) as total FROM fees WHERE status = 'Overdue'`).get().total || 0;
+    
+    const countPaid = db.prepare(`SELECT COUNT(*) as count FROM fees WHERE status = 'Paid'`).get().count;
+    const countPending = db.prepare(`SELECT COUNT(*) as count FROM fees WHERE status = 'Pending'`).get().count;
+    const countOverdue = db.prepare(`SELECT COUNT(*) as count FROM fees WHERE status = 'Overdue'`).get().count;
+
+    res.json({
+      success: true,
+      data: {
+        totalCollected,
+        totalPending,
+        totalOverdue,
+        countPaid,
+        countPending,
+        countOverdue,
+        totalTransactions: countPaid + countPending + countOverdue
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.post('/api/fees', (req, res) => {
+  try {
+    const { student_id, class_id, fee_type, amount, due_date, remarks } = req.body;
+    if (!class_id || !fee_type || !amount || !due_date) {
+      return res.status(400).json({ success: false, message: 'Class, fee type, amount, and due date are required.' });
+    }
+
+    const insertFee = db.prepare(`
+      INSERT INTO fees (student_id, class_id, fee_type, amount, due_date, status, remarks)
+      VALUES (?, ?, ?, ?, ?, 'Pending', ?)
+    `);
+
+    if (student_id) {
+      insertFee.run(student_id, class_id, fee_type, amount, due_date, remarks || '');
+      res.json({ success: true, message: 'Fee record created successfully.' });
+    } else {
+      const students = db.prepare('SELECT id FROM students WHERE class_id = ?').all(class_id);
+      for (const st of students) {
+        insertFee.run(st.id, class_id, fee_type, amount, due_date, remarks || '');
+      }
+      res.json({ success: true, message: `Fee records generated for all ${students.length} students in class.` });
+    }
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.post('/api/fees/:id/pay', (req, res) => {
+  try {
+    const { id } = req.params;
+    const { payment_mode, remarks, paid_date } = req.body;
+
+    const receiptNumber = `VM-REC-${Date.now().toString().slice(-6)}`;
+    const paymentDate = paid_date || getTodayString();
+
+    const stmt = db.prepare(`
+      UPDATE fees 
+      SET status = 'Paid',
+          paid_date = ?,
+          payment_mode = ?,
+          receipt_number = ?,
+          remarks = COALESCE(?, remarks)
+      WHERE id = ?
+    `);
+
+    stmt.run(paymentDate, payment_mode || 'Cash', receiptNumber, remarks || null, id);
+
+    const updated = db.prepare(`
+      SELECT f.*, s.first_name || ' ' || s.last_name AS student_name, s.roll_number, c.name || ' - ' || c.section AS class_label
+      FROM fees f
+      JOIN students s ON f.student_id = s.id
+      JOIN classes c ON f.class_id = c.id
+      WHERE f.id = ?
+    `).get(id);
+
+    res.json({ success: true, message: 'Payment recorded successfully.', data: updated });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 // Fallback route for SPA
 app.use((req, res, next) => {
   if (req.path.startsWith('/api')) return next();

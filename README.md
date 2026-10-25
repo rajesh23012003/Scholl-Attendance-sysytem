@@ -52,6 +52,29 @@ A modern, full-stack **School Attendance Management & Leave Portal** built with 
 - Class teacher assignments, room numbers, and enrolled student counters.
 - Create new classes/sections.
 
+### 8. 🔐 Role-Based Login & Authentication (New!)
+- Multi-role support for **Principal (Admin)**, **Class Teachers**, and **Parents/Students**.
+- Interactive Login screen with instant 1-click Demo quick-switch buttons for effortless demoing & presentations.
+- Topbar user profile badge, active role indicator, and easy role switching.
+
+### 9. 🪪 Student ID Card Generation & Print (New!)
+- Instant high-definition ID badge generation with photo placeholder, roll number, and classroom.
+- Front and Back card views (instructions, emergency contact, CBSE accreditation).
+- SVG Barcode & scannable QR Code simulation with student verification details.
+- Dedicated `@media print` CSS layout for one-click card printing or PDF export.
+
+### 10. 🕒 Class Timetable & Period Schedule (New!)
+- Weekly interactive schedule matrix (Monday to Friday, Periods 1 to 6).
+- Color-coded subject badges, assigned subject teachers, and room numbers.
+- Modal editor to add or reassign periods and timings.
+- Printable timetable view for classroom notice boards.
+
+### 11. 💳 Fee Tracking & Official Receipts Portal (New!)
+- Comprehensive Fee Dashboard: Total Collection, Pending Dues, Overdue amounts.
+- Multi-mode payment recording (UPI/QR, Cash, Net Banking, Cheque, Cards).
+- Auto-generated receipt numbers (`VM-REC-XXXXXX`).
+- Official printable fee receipt with verified school stamp, itemized breakdown, and cashier signature.
+
 ---
 
 ## 🏗️ Tech Stack
