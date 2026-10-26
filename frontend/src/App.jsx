@@ -17,7 +17,8 @@ import {
   User,
   ShieldCheck,
   LogOut,
-  LogIn
+  LogIn,
+  Award
 } from 'lucide-react';
 
 import Dashboard from './components/Dashboard';
@@ -31,6 +32,7 @@ import Timetable from './components/Timetable';
 import Fees from './components/Fees';
 import IdCards from './components/IdCards';
 import LoginModal from './components/LoginModal';
+import Examinations from './components/Examinations';
 
 export default function App() {
   const [currentTab, setCurrentTab] = useState('dashboard');
@@ -190,6 +192,14 @@ export default function App() {
           </button>
 
           <button 
+            className={`nav-item ${currentTab === 'exams' ? 'active' : ''}`}
+            onClick={() => setCurrentTab('exams')}
+          >
+            <Award size={18} />
+            <span>Exams & Report Cards</span>
+          </button>
+
+          <button 
             className={`nav-item ${currentTab === 'fees' ? 'active' : ''}`}
             onClick={() => setCurrentTab('fees')}
           >
@@ -246,6 +256,7 @@ export default function App() {
               {currentTab === 'attendance' && 'Daily Attendance Register'}
               {currentTab === 'leaves' && 'Student Leave Management'}
               {currentTab === 'timetable' && 'Class Timetable & Schedule'}
+              {currentTab === 'exams' && 'Exams & Academic Report Cards'}
               {currentTab === 'fees' && 'Fee Management & Official Receipts'}
               {currentTab === 'idcards' && 'Student ID Card Generator & Printing'}
               {currentTab === 'students' && 'Students Directory'}
@@ -383,6 +394,13 @@ export default function App() {
 
           {currentTab === 'timetable' && (
             <Timetable 
+              classes={classes}
+              showToast={showToast}
+            />
+          )}
+
+          {currentTab === 'exams' && (
+            <Examinations 
               classes={classes}
               showToast={showToast}
             />

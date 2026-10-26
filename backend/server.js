@@ -910,6 +910,220 @@ app.post('/api/fees/:id/pay', (req, res) => {
   }
 });
 
+// -------------------------------------------------------------
+// 10. EXAMINATIONS & REPORT CARDS API
+// -------------------------------------------------------------
+function calculateGrade(percentage) {
+  if (percentage >= 91) return 'A1';
+  if (percentage >= 81) return 'A2';
+  if (percentage >= 71) return 'B1';
+  if (percentage >= 61) return 'B2';
+  if (percentage >= 51) return 'C1';
+  if (percentage >= 41) return 'C2';
+  if (percentage >= 33) return 'D';
+  return 'E';
+}
+
+app.get('/api/exams', (req, res) => {
+  try {
+    const exams = db.prepare('SELECT * FROM exams ORDER BY id ASC').all();
+    res.json({ success: true, data: exams });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.get('/api/exams/:id/classes/:class_id', (req, res) => {
+  try {
+    const { id: exam_id, class_id } = req.params;
+
+    const exam = db.prepare('SELECT * FROM exams WHERE id = ?').get(exam_id);
+    if (!exam) return res.status(404).json({ success: false, message: 'Exam not found' });
+
+    const students = db.prepare(`
+      SELECT s.id, s.roll_number, s.first_name || ' ' || s.last_name AS name, s.gender, s.parent_name
+      FROM students s
+      WHERE s.class_id = ?
+      ORDER BY CAST(s.roll_number AS INTEGER) ASC
+    `).all(class_id);
+
+    const allMarks = db.prepare(`
+      SELECT m.*
+      FROM marks m
+      WHERE m.exam_id = ? AND m.class_id = ?
+    `).all(exam_id, class_id);
+
+    // Group marks by student and calculate aggregates
+    const studentResults = students.map(st => {
+      const stMarks = allMarks.filter(m => m.student_id === st.id);
+      const totalMarksObtained = stMarks.reduce((sum, m) => sum + m.total_marks, 0);
+      const totalMaxMarks = stMarks.reduce((sum, m) => sum + m.max_marks, 0);
+      const percentage = totalMaxMarks > 0 ? Math.round((totalMarksObtained / totalMaxMarks) * 1000) / 10 : 0;
+      const overallGrade = calculateGrade(percentage);
+
+      return {
+        student_id: st.id,
+        roll_number: st.roll_number,
+        name: st.name,
+        gender: st.gender,
+        parent_name: st.parent_name,
+        subjects: stMarks,
+        totalMarksObtained,
+        totalMaxMarks,
+        percentage,
+        overallGrade,
+        passed: percentage >= 33.0
+      };
+    });
+
+    // Sort by percentage descending to compute Class Rank
+    studentResults.sort((a, b) => b.percentage - a.percentage);
+    studentResults.forEach((st, idx) => {
+      st.rank = idx + 1;
+    });
+
+    // Re-sort by roll_number for standard display
+    const sortedByRoll = [...studentResults].sort((a, b) => parseInt(a.roll_number) - parseInt(b.roll_number));
+
+    // Stats
+    const totalAppeared = studentResults.length;
+    const passedCount = studentResults.filter(s => s.passed).length;
+    const passRate = totalAppeared > 0 ? Math.round((passedCount / totalAppeared) * 100) : 0;
+    const avgPercentage = totalAppeared > 0 ? Math.round((studentResults.reduce((sum, s) => sum + s.percentage, 0) / totalAppeared) * 10) / 10 : 0;
+    const highestPercentage = totalAppeared > 0 ? Math.max(...studentResults.map(s => s.percentage)) : 0;
+
+    res.json({
+      success: true,
+      data: {
+        exam,
+        stats: {
+          totalAppeared,
+          passRate,
+          avgPercentage,
+          highestPercentage,
+          topper: studentResults[0] || null
+        },
+        students: sortedByRoll,
+        leaderboard: studentResults.slice(0, 3)
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.get('/api/reports/report-card', (req, res) => {
+  try {
+    const { exam_id, student_id } = req.query;
+    if (!exam_id || !student_id) {
+      return res.status(400).json({ success: false, message: 'exam_id and student_id required.' });
+    }
+
+    const exam = db.prepare('SELECT * FROM exams WHERE id = ?').get(exam_id);
+    const student = db.prepare(`
+      SELECT s.*, c.name || ' - ' || c.section AS class_label, c.class_teacher, c.room_number
+      FROM students s
+      JOIN classes c ON s.class_id = c.id
+      WHERE s.id = ?
+    `).get(student_id);
+
+    if (!exam || !student) {
+      return res.status(404).json({ success: false, message: 'Exam or student not found' });
+    }
+
+    const marks = db.prepare(`
+      SELECT * FROM marks
+      WHERE exam_id = ? AND student_id = ?
+      ORDER BY id ASC
+    `).all(exam_id, student_id);
+
+    // Compute class rank for student
+    const classmatesMarks = db.prepare(`
+      SELECT student_id, SUM(total_marks) as total
+      FROM marks
+      WHERE exam_id = ? AND class_id = ?
+      GROUP BY student_id
+      ORDER BY total DESC
+    `).all(exam_id, student.class_id);
+
+    let rank = 1;
+    classmatesMarks.forEach((cm, i) => {
+      if (cm.student_id === parseInt(student_id)) {
+        rank = i + 1;
+      }
+    });
+
+    // Attendance stats for student
+    const attStats = db.prepare(`
+      SELECT 
+        COUNT(*) as total_days,
+        COUNT(CASE WHEN status IN ('Present', 'Late') THEN 1 END) as attended
+      FROM attendance
+      WHERE student_id = ?
+    `).get(student_id);
+
+    const attendanceRate = attStats.total_days > 0 
+      ? Math.round((attStats.attended / attStats.total_days) * 100)
+      : 94;
+
+    const totalObtained = marks.reduce((acc, m) => acc + m.total_marks, 0);
+    const totalMax = marks.reduce((acc, m) => acc + m.max_marks, 0);
+    const percentage = totalMax > 0 ? Math.round((totalObtained / totalMax) * 1000) / 10 : 0;
+    const overallGrade = calculateGrade(percentage);
+
+    res.json({
+      success: true,
+      data: {
+        exam,
+        student,
+        marks,
+        summary: {
+          totalObtained,
+          totalMax,
+          percentage,
+          overallGrade,
+          rank,
+          totalInClass: classmatesMarks.length,
+          attendanceRate,
+          result: percentage >= 33 ? (percentage >= 75 ? 'PASSED WITH DISTINCTION' : 'PASSED') : 'ESSENTIAL REPEAT'
+        }
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.post('/api/marks', (req, res) => {
+  try {
+    const { exam_id, student_id, class_id, subject, theory_marks, practical_marks, remarks } = req.body;
+    if (!exam_id || !student_id || !class_id || !subject) {
+      return res.status(400).json({ success: false, message: 'Missing required marks fields' });
+    }
+
+    const t = parseFloat(theory_marks) || 0;
+    const p = parseFloat(practical_marks) || 0;
+    const total = Math.min(100, Math.max(0, t + p));
+    const grade = calculateGrade(total);
+
+    const stmt = db.prepare(`
+      INSERT INTO marks (exam_id, student_id, class_id, subject, theory_marks, practical_marks, total_marks, max_marks, grade, remarks)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 100, ?, ?)
+      ON CONFLICT(exam_id, student_id, subject) DO UPDATE SET
+        theory_marks = excluded.theory_marks,
+        practical_marks = excluded.practical_marks,
+        total_marks = excluded.total_marks,
+        grade = excluded.grade,
+        remarks = excluded.remarks
+    `);
+
+    stmt.run(exam_id, student_id, class_id, subject, t, p, total, grade, remarks || '');
+    res.json({ success: true, message: 'Marks recorded successfully.' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 // Fallback route for SPA
 app.use((req, res, next) => {
   if (req.path.startsWith('/api')) return next();

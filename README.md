@@ -75,6 +75,12 @@ A modern, full-stack **School Attendance Management & Leave Portal** built with 
 - Auto-generated receipt numbers (`VM-REC-XXXXXX`).
 - Official printable fee receipt with verified school stamp, itemized breakdown, and cashier signature.
 
+### 12. 📑 Academic Examinations & CBSE Report Card Generator (New!)
+- **Consolidated Class Gradebook:** View marks, percentages, and automated **Class Ranks (🥇 Rank 1, 2, 3...)** for every student.
+- **Performance Analytics:** Class Average %, Pass Rate %, and Topper spotlight.
+- **Marks Entry System:** Subject-wise Theory (80) & Internal/Practical (20) entry with real-time grade calculation (A1 to E).
+- **Official CBSE Printable Report Card:** Scholastic marks table, Co-scholastic ratings (Art, Physical Ed, Discipline), term attendance %, teacher remarks, principal signature, and official seal in an authentic certificate layout.
+
 ---
 
 ## 🏗️ Tech Stack

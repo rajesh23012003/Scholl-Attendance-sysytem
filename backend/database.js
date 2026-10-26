@@ -107,6 +107,36 @@ function initDb() {
       FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
       FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS exams (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      term TEXT NOT NULL,
+      academic_year TEXT DEFAULT '2026-2027',
+      start_date TEXT,
+      end_date TEXT,
+      status TEXT DEFAULT 'Completed' CHECK(status IN ('Upcoming', 'Ongoing', 'Completed')),
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS marks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      exam_id INTEGER NOT NULL,
+      student_id INTEGER NOT NULL,
+      class_id INTEGER NOT NULL,
+      subject TEXT NOT NULL,
+      theory_marks REAL DEFAULT 0,
+      practical_marks REAL DEFAULT 0,
+      total_marks REAL NOT NULL,
+      max_marks REAL DEFAULT 100,
+      grade TEXT NOT NULL,
+      remarks TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (exam_id) REFERENCES exams(id) ON DELETE CASCADE,
+      FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
+      FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE,
+      UNIQUE(exam_id, student_id, subject)
+    );
   `);
 
   // Check if we already have classes seeded
@@ -137,6 +167,12 @@ function initDb() {
   const checkFees = db.prepare('SELECT COUNT(*) as count FROM fees').get();
   if (checkFees.count === 0) {
     seedInitialFees();
+  }
+
+  // Check if we have exams seeded
+  const checkExams = db.prepare('SELECT COUNT(*) as count FROM exams').get();
+  if (checkExams.count === 0) {
+    seedInitialExamsAndMarks();
   }
 }
 
@@ -334,6 +370,85 @@ function seedInitialFees() {
   });
 
   console.log('Sample fees records seeded!');
+}
+
+function seedInitialExamsAndMarks() {
+  console.log('Seeding exams and marks records...');
+
+  const insertExam = db.prepare(`
+    INSERT INTO exams (title, term, academic_year, start_date, end_date, status)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `);
+
+  const exam1 = insertExam.run('Mid-Term Examination 2026', 'Term 1', '2026-2027', '2026-09-15', '2026-09-28', 'Completed');
+  const exam2 = insertExam.run('Unit Test 1 (Formative Assessment)', 'Term 1', '2026-2027', '2026-07-20', '2026-07-25', 'Completed');
+  const exam3 = insertExam.run('Annual Final Board Mock 2027', 'Term 2', '2026-2027', '2027-02-15', '2027-02-28', 'Upcoming');
+
+  const examId = exam1.lastInsertRowid;
+
+  const insertMark = db.prepare(`
+    INSERT INTO marks (exam_id, student_id, class_id, subject, theory_marks, practical_marks, total_marks, max_marks, grade, remarks)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const students = db.prepare('SELECT id, class_id, first_name, last_name, roll_number FROM students').all();
+
+  const subjects = [
+    { name: 'Mathematics', maxTheory: 80, maxInternal: 20 },
+    { name: 'Science', maxTheory: 70, maxInternal: 30 },
+    { name: 'English Literature', maxTheory: 80, maxInternal: 20 },
+    { name: 'Social Science', maxTheory: 80, maxInternal: 20 },
+    { name: 'Hindi Course A', maxTheory: 80, maxInternal: 20 },
+    { name: 'Computer Applications', maxTheory: 60, maxInternal: 40 }
+  ];
+
+  function getGrade(tot) {
+    if (tot >= 91) return 'A1';
+    if (tot >= 81) return 'A2';
+    if (tot >= 71) return 'B1';
+    if (tot >= 61) return 'B2';
+    if (tot >= 51) return 'C1';
+    if (tot >= 41) return 'C2';
+    if (tot >= 33) return 'D';
+    return 'E';
+  }
+
+  students.forEach((st) => {
+    // Generate realistic base aptitude: 68 to 94
+    const baseScore = 68 + ((st.id * 7) % 27);
+
+    subjects.forEach((sub, subIdx) => {
+      const variation = ((subIdx * 6 + st.id * 4) % 17) - 8;
+      let total = Math.min(99, Math.max(42, Math.round(baseScore + variation)));
+
+      const internalRatio = sub.maxInternal / 100;
+      const internal = Math.round(total * internalRatio);
+      const theory = total - internal;
+
+      const grade = getGrade(total);
+      let remarks = 'Good effort';
+      if (grade === 'A1') remarks = 'Outstanding conceptual mastery';
+      else if (grade === 'A2') remarks = 'Excellent analytical ability';
+      else if (grade === 'B1') remarks = 'Very good understanding';
+      else if (grade === 'B2') remarks = 'Satisfactory, can score higher';
+      else if (grade === 'C1' || grade === 'C2') remarks = 'Requires focused revision';
+
+      insertMark.run(
+        examId,
+        st.id,
+        st.class_id,
+        sub.name,
+        theory,
+        internal,
+        total,
+        100,
+        grade,
+        remarks
+      );
+    });
+  });
+
+  console.log('Sample exam marks seeded successfully!');
 }
 
 function seedInitialData() {
