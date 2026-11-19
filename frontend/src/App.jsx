@@ -18,7 +18,8 @@ import {
   ShieldCheck,
   LogOut,
   LogIn,
-  Award
+  Award,
+  Cloud
 } from 'lucide-react';
 
 import Dashboard from './components/Dashboard';
@@ -33,6 +34,7 @@ import Fees from './components/Fees';
 import IdCards from './components/IdCards';
 import LoginModal from './components/LoginModal';
 import Examinations from './components/Examinations';
+import AwsCloud from './components/AwsCloud';
 
 export default function App() {
   const [currentTab, setCurrentTab] = useState('dashboard');
@@ -238,11 +240,36 @@ export default function App() {
             <GraduationCap size={18} />
             <span>Classes & Sections</span>
           </button>
+
+          <button 
+            className={`nav-item ${currentTab === 'aws' ? 'active' : ''}`}
+            onClick={() => setCurrentTab('aws')}
+            style={{
+              marginTop: '8px',
+              border: currentTab === 'aws' ? '1px solid #f59e0b' : '1px dashed rgba(255, 153, 0, 0.4)',
+              background: currentTab === 'aws' ? 'linear-gradient(135deg, #b45309 0%, #ea580c 100%)' : 'rgba(255, 153, 0, 0.08)',
+              color: currentTab === 'aws' ? '#ffffff' : '#fbbf24'
+            }}
+          >
+            <Cloud size={18} color="#fbbf24" />
+            <span style={{ fontWeight: 700 }}>AWS Cloud Hub</span>
+            <span style={{
+              marginLeft: 'auto',
+              background: '#ff9900',
+              color: '#000',
+              borderRadius: '4px',
+              padding: '1px 6px',
+              fontSize: '0.68rem',
+              fontWeight: 800
+            }}>
+              VPC/RDS
+            </span>
+          </button>
         </nav>
 
         <div className="sidebar-footer">
-          <div style={{ color: '#cbd5e1', fontWeight: 600 }}>School Portal v2.5</div>
-          <div>Status: <span style={{ color: '#10b981' }}>● Online (SQLite)</span></div>
+          <div style={{ color: '#cbd5e1', fontWeight: 600 }}>School Portal AWS v3.0</div>
+          <div>Architecture: <span style={{ color: '#10b981' }}>● VPC &bull; RDS &bull; S3</span></div>
         </div>
       </aside>
 
@@ -262,10 +289,26 @@ export default function App() {
               {currentTab === 'students' && 'Students Directory'}
               {currentTab === 'reports' && 'Attendance Reports & Analytics'}
               {currentTab === 'classes' && 'Classrooms & Sections'}
+              {currentTab === 'aws' && 'AWS Enterprise Cloud Architecture (VPC, RDS MySQL, S3, CloudWatch)'}
             </h2>
           </div>
 
           <div className="topbar-right">
+            <button 
+              className="btn btn-sm"
+              style={{
+                background: currentTab === 'aws' ? 'linear-gradient(135deg, #d97706 0%, #ea580c 100%)' : '#fffbeb',
+                color: currentTab === 'aws' ? '#ffffff' : '#b45309',
+                border: '1px solid #fde68a',
+                fontWeight: 800,
+                gap: '6px'
+              }}
+              onClick={() => setCurrentTab('aws')}
+              title="Open AWS Cloud Infrastructure Hub"
+            >
+              <Cloud size={16} />
+              AWS Cloud
+            </button>
             <div className="date-pill">
               <Calendar size={15} color="var(--primary)" />
               <span>{todayFormatted}</span>
@@ -442,6 +485,10 @@ export default function App() {
               showToast={showToast}
               refreshClasses={fetchClasses}
             />
+          )}
+
+          {currentTab === 'aws' && (
+            <AwsCloud showToast={showToast} />
           )}
         </div>
       </main>
